@@ -1,3 +1,4 @@
+import os
 from copy import deepcopy
 
 import brukeropusreader as opus
@@ -5,35 +6,31 @@ import numpy as np
 from scipy.interpolate import CubicHermiteSpline, CubicSpline, interp1d
 from scipy.signal import savgol_filter
 
-import os
 print(os.path.dirname(os.path.abspath(__file__)))
 
-from baseline import baseline_alss, baseline_rubberband, baseline_zhang
-from enumerations import BaseLineMode, NormMode, Scale, Smooth
-from exceptions import (SpcChangeEx, SpcComparabilityEx, SpcCreationEx,
-                         SpcReadingEx)
-from miscellaneous import summ_voigts
-from smoothing import Smoother
+from .baseline import baseline_alss, baseline_rubberband, baseline_zhang
+from .enumerations import BaseLineMode, NormMode, Scale, Smooth
+from .exceptions import SpcChangeEx, SpcComparabilityEx, SpcCreationEx, SpcReadingEx
+from .miscellaneous import summ_voigts
+from .smoothing import Smoother
 
 
 class Spectrum:
     __ATR_to_AB = 1000
     spectrum_id = 0
     epsilon = 0.001
-    __ops = {
-        '+': lambda x, y: x + y,
-        '-': lambda x, y: x - y,
-        '*': lambda x, y: x * y
-    }
+    __ops = {"+": lambda x, y: x + y, "-": lambda x, y: x - y, "*": lambda x, y: x * y}
 
-    def __init__(self, wavenums=None, data=None, path='', clss: str = 'undefined', peaks=None):
+    def __init__(
+        self, wavenums=None, data=None, path="", clss: str = "undefined", peaks=None
+    ):
         if wavenums is None:
             wavenums, data = np.array([], dtype=float), np.array([], dtype=float)
         self._path = path
         if peaks is not None:
             self.data = summ_voigts(wavenums, peaks)
             self.wavenums = wavenums
-        elif path and path.endswith('.csv'):
+        elif path and path.endswith(".csv"):
             self.wavenums, self.data, clss = Spectrum.read_csv(path)
         elif path:
             self.wavenums, self.data = Spectrum.__read_opus(path)
@@ -45,7 +42,9 @@ class Spectrum:
         self.clss = clss
         Spectrum.spectrum_id += 1
         self.__id = Spectrum.spectrum_id
-        self.step = abs(self.wavenums[1] - self.wavenums[0]) if len(self.wavenums) > 1 else 0
+        self.step = (
+            abs(self.wavenums[1] - self.wavenums[0]) if len(self.wavenums) > 1 else 0
+        )
 
     @property
     def id(self):
@@ -55,7 +54,7 @@ class Spectrum:
         return len(self.wavenums)
 
     def __str__(self):
-        return '\t'.join((str(self.__id), self._path, self.clss))
+        return "\t".join((str(self.__id), self._path, self.clss))
 
     def __bool__(self):
         return len(self.wavenums) != 0
@@ -73,7 +72,11 @@ class Spectrum:
         :return: float - cosine similarity
         """
         if self.is_comparable(other):
-            return np.dot(self.data, other.data) / np.linalg.norm(self.data) / np.linalg.norm(other.data)
+            return (
+                np.dot(self.data, other.data)
+                / np.linalg.norm(self.data)
+                / np.linalg.norm(other.data)
+            )
         else:
             raise SpcComparabilityEx
 
@@ -91,16 +94,16 @@ class Spectrum:
         axis = not x
         filtered = list(filter(lambda wi: start <= wi[axis] <= end, self))
         if not filtered:
-            print('Incorrect range!')
+            print("Incorrect range!")
             return self
         w, d = map(np.array, zip(*filtered))
         return Spectrum(wavenums=w, data=d, clss=self.clss)
 
     def select(self, *intervals):
         """
-		intervals --  края отрезков (wavenums), которые НУЖНО включить
-		rtype: None
-		"""
+        intervals --  края отрезков (wavenums), которые НУЖНО включить
+        rtype: None
+        """
         mask = [False] * len(self)
         intevals = [interval.sort() for interval in intervals]
         for i in range(len(self)):
@@ -149,8 +152,8 @@ class Spectrum:
         spc = self.range(self[rangeind[0]][0], self[rangeind[1]][0])
         newd = method(spc, **kwargs)
         for i, pos in enumerate(list(range(*rangeind))):
-            self.data[pos] = newd[i] 
-        
+            self.data[pos] = newd[i]
+
         # self.data = method(self, **kwargs)
 
     def get_derivative(self, n=1, win_width=13, order=5):
@@ -168,8 +171,7 @@ class Spectrum:
         if win_width % 2 != 1:
             win_width += 1
 
-        self.data = savgol_filter(
-            self.data, win_width, polyorder=order, deriv=n)
+        self.data = savgol_filter(self.data, win_width, polyorder=order, deriv=n)
 
     def get_extrema(self, locals=True, minima=False, include_edges=False):
         """
@@ -184,10 +186,16 @@ class Spectrum:
         iextr = 1
 
         if minima:
-            f = lambda i: self.data[i - 1] > self.data[i] and self.data[i] < self.data[i + 1]
+            f = (
+                lambda i: self.data[i - 1] > self.data[i]
+                and self.data[i] < self.data[i + 1]
+            )
             comp = lambda i, iextr: self.data[i] < self.data[iextr]
         else:
-            f = lambda i: self.data[i - 1] < self.data[i] and self.data[i] > self.data[i + 1]
+            f = (
+                lambda i: self.data[i - 1] < self.data[i]
+                and self.data[i] > self.data[i + 1]
+            )
             comp = lambda i, iextr: self.data[i] > self.data[iextr]
 
         for i in range(1, len(self) - 1):
@@ -197,12 +205,20 @@ class Spectrum:
                 iextr = i if comp(i, iextr) else iextr
 
         if include_edges:
-            if minima and self.data[0] < self.data[1] \
-                    or (not minima) and self.data[0] > self.data[1]:
+            if (
+                minima
+                and self.data[0] < self.data[1]
+                or (not minima)
+                and self.data[0] > self.data[1]
+            ):
                 indices.insert(0, 0)
                 wavenums.insert(0, self.wavenums[0])
-            if minima and self.data[-1] < self.data[-2] \
-                    or (not minima) and self.data[-1] > self.data[-2]:
+            if (
+                minima
+                and self.data[-1] < self.data[-2]
+                or (not minima)
+                and self.data[-1] > self.data[-2]
+            ):
                 indices.append(len(self) - 1)
                 wavenums.append(self.wavenums[-1])
             iextr = 0 if comp(0, iextr) else iextr
@@ -210,7 +226,6 @@ class Spectrum:
         if not locals:
             return [iextr], [self.wavenums[iextr]]
         return indices, wavenums
-
 
     def standartize(self):
         self.data = (self.data - self.mean) / self.std
@@ -224,10 +239,10 @@ class Spectrum:
         return np.std(self.data)
 
     def reset(self):
-        '''
+        """
         Restore the values of wavenumbers and intensities according to the file in self.path.
-        '''
-        if self._path.endswith('.csv'):
+        """
+        if self._path.endswith(".csv"):
             self.wavenums, self.data, _ = Spectrum.read_csv(self._path)
         else:
             self.wavenums, self.data = Spectrum.__read_opus(self._path)
@@ -244,7 +259,7 @@ class Spectrum:
                 s.data = Spectrum.__ops[op](self.data, other.data)
             else:
                 raise SpcChangeEx
-        elif hasattr(other, '__iter__'):
+        elif hasattr(other, "__iter__"):
             if len(self) == len(other):
                 s.data = Spectrum.__ops[op](self.data, other)
             else:
@@ -262,7 +277,7 @@ class Spectrum:
                 self.data = Spectrum.__ops[op](self.data, other.data)
             else:
                 raise SpcChangeEx
-        elif hasattr(other, '__iter__'):
+        elif hasattr(other, "__iter__"):
             if len(self) == len(other):
                 self.data += other
             else:
@@ -272,46 +287,50 @@ class Spectrum:
         return self
 
     def __iadd__(self, other):
-        return Spectrum.__in_place_spectra_operation(self, other, '+')
+        return Spectrum.__in_place_spectra_operation(self, other, "+")
 
     def __isub__(self, other):
-        return Spectrum.__in_place_spectra_operation(self, other, '-')
+        return Spectrum.__in_place_spectra_operation(self, other, "-")
 
     def __imul__(self, other):
-        return Spectrum.__in_place_spectra_operation(self, other, '*')
+        return Spectrum.__in_place_spectra_operation(self, other, "*")
 
     def __add__(self, other):
-        return Spectrum.__two_op_spectra_operation(self, other, '+')
+        return Spectrum.__two_op_spectra_operation(self, other, "+")
 
     def __radd__(self, other):
-        return Spectrum.__two_op_spectra_operation(self, other, '+')
+        return Spectrum.__two_op_spectra_operation(self, other, "+")
 
     def __mul__(self, other):
-        return Spectrum.__two_op_spectra_operation(self, other, '*')
+        return Spectrum.__two_op_spectra_operation(self, other, "*")
 
     def __rmul__(self, other):
-        return Spectrum.__two_op_spectra_operation(self, other, '*')
+        return Spectrum.__two_op_spectra_operation(self, other, "*")
 
     def __sub__(self, other):
         """
-		resulting spectrum inherits all the attributes of the first argument
-		"""
-        return Spectrum.__two_op_spectra_operation(self, other, '-')
+        resulting spectrum inherits all the attributes of the first argument
+        """
+        return Spectrum.__two_op_spectra_operation(self, other, "-")
 
     def __rsub__(self, other):
-        return Spectrum.__two_op_spectra_operation(-1 * self, other, '+')
+        return Spectrum.__two_op_spectra_operation(-1 * self, other, "+")
 
     def is_comparable(self, other):
-        '''
+        """
         Returns whether it is possible to compare two spectra value by value and to operate with them further.
 
         params:
         other: Spectrum
         rtype: bool
-        '''
-        return len(self) == len(other) \
-               and abs(self.wavenums[0] - other.wavenums[0]) / other.wavenums[0] < Spectrum.epsilon \
-               and abs(self.wavenums[-1] - other.wavenums[-1]) / other.wavenums[-1] < Spectrum.epsilon
+        """
+        return (
+            len(self) == len(other)
+            and abs(self.wavenums[0] - other.wavenums[0]) / other.wavenums[0]
+            < Spectrum.epsilon
+            and abs(self.wavenums[-1] - other.wavenums[-1]) / other.wavenums[-1]
+            < Spectrum.epsilon
+        )
 
     def change_size(self, sample):
         size = len(sample)
@@ -320,7 +339,9 @@ class Spectrum:
         spc_minval = self.wavenums[0]
         spc_maxval = self.wavenums[-1]
 
-        if sample_maxval >= spc_maxval and spc_minval >= sample_minval:  # s lies inside the spectrum
+        if (
+            sample_maxval >= spc_maxval and spc_minval >= sample_minval
+        ):  # s lies inside the spectrum
             for i in range(len(self)):
                 pass
 
@@ -330,7 +351,7 @@ class Spectrum:
         try:
             file = opus.read_file(path)
             x = file.get_range()
-            y = file['AB']
+            y = file["AB"]
         except SpcReadingEx as err:
             pass
         finally:
@@ -346,14 +367,14 @@ class Spectrum:
         scale_type: Scale
         """
         if scale_type == Scale.WAVELENGTH_nm:
-            scale = 10_000_000. / self.wavenums
+            scale = 10_000_000.0 / self.wavenums
         elif scale_type == Scale.WAVELENGTH_um:
-            scale = 10_000. / self.wavenums
+            scale = 10_000.0 / self.wavenums
         else:
             scale = self.wavenums
-        with open(path, 'w') as out:
-            print(scale_type.value, *scale, sep=',', file=out)
-            print(self.clss, *self.data, sep=',', file=out)
+        with open(path, "w") as out:
+            print(scale_type.value, *scale, sep=",", file=out)
+            print(self.clss, *self.data, sep=",", file=out)
 
     def cut_base(self, level=0):
         """
@@ -385,7 +406,10 @@ class Spectrum:
         if reversed_x:
             oldx, oldy = self.wavenums[::-1], self.data[::-1]
         if mode == Smooth.CUBIC_SPLINE:
-            f = CubicSpline(oldx, oldy, )
+            f = CubicSpline(
+                oldx,
+                oldy,
+            )
         elif mode == Smooth.LINEAR:
             f = interp1d(oldx, oldy)
             pass
@@ -406,6 +430,7 @@ class Spectrum:
 
     def transform(self):
         from output import show_spectra
+
         count = 5
         while abs(self.data.max()) < 1 and count and not self.__isintegral():
             self.integrate()
@@ -422,26 +447,16 @@ class Spectrum:
         """
         Read the only spectrum from the .csv file
         """
-        with open(path, 'r') as csv:
-            scale = csv.readline().split(',')
+        with open(path, "r") as csv:
+            scale = csv.readline().split(",")
             scale_type, *scale = scale
             if scale_type == Scale.WAVENUMBERS.value:
                 f = float
             elif scale_type == Scale.WAVELENGTH_um.value:
-                f = lambda x: 10_000. / float(x)
+                f = lambda x: 10_000.0 / float(x)
             else:
-                f = lambda x: 10_000_000. / float(x)
+                f = lambda x: 10_000_000.0 / float(x)
             scale = np.array(list(map(f, scale)))
-            clss, *data = csv.readline().strip().split(',')
+            clss, *data = csv.readline().strip().split(",")
             data = np.array(list(map(float, data)))
             return scale, data, clss
-
-
-if __name__ == '__main__':
-    from output import show_spectra
-    s1 = Spectrum(path="data/Serum_Turtle_1_1.0")
-    s2 = Spectrum(path="data/Serum_Turtle_1_1.2")
-    s1.clss = "first"
-    s2.clss = "second"
-    show_spectra([s1, s2])
-    

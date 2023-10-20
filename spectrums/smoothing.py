@@ -1,4 +1,5 @@
 import os
+
 # import statsmodels.api as sm
 import time
 
@@ -6,13 +7,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import fft, fftshift, ifft
 from scipy.ndimage import gaussian_filter
-from scipy.signal import (deconvolve, savgol_filter, sosfilt, spline_filter,
-                          wiener)
+from scipy.signal import deconvolve, savgol_filter, sosfilt, spline_filter, wiener
 
-from enumerations import BaseLineMode, LossFunc, NormMode, Smooth
-from miscellaneous import gauss
+from .enumerations import BaseLineMode, LossFunc, NormMode, Smooth
+from .miscellaneous import gauss
+
 # from scan import get_spectra_list, read_columns
-from output import show_spectra
+from .output import show_spectra
 
 
 class ParamGrid:
@@ -20,7 +21,7 @@ class ParamGrid:
     methods = []
 
     @staticmethod
-    def param_gen(param: dict, iterby: str=None):
+    def param_gen(param: dict, iterby: str = None):
         if not param:
             return {}
         names = list(param)
@@ -44,16 +45,20 @@ class ParamGrid:
                     yield from choose_one(i + 1)
 
         yield from choose_one(0)
-    
+
     @staticmethod
-    def params_grid_compare(spc, spc_ideal, prng,
-                            process,
-                                   path='lowess_report.csv',
-                                   delimiter=',',
-                                   loss=LossFunc.RMSE):
-        headers = list(prng) + ['peaks', 'comptime', 'loss']
-        with open(path, 'w') as out:
-            out.write(delimiter.join(headers) + '\n')
+    def params_grid_compare(
+        spc,
+        spc_ideal,
+        prng,
+        process,
+        path="lowess_report.csv",
+        delimiter=",",
+        loss=LossFunc.RMSE,
+    ):
+        headers = list(prng) + ["peaks", "comptime", "loss"]
+        with open(path, "w") as out:
+            out.write(delimiter.join(headers) + "\n")
             for params in ParamGrid.param_gen(prng):
                 line = [str(np.round(params[param], 3)) for param in params]
                 cursp = spc * 1
@@ -64,15 +69,24 @@ class ParamGrid:
                 except:
                     continue
                 cursp.data = d
-                line.append(str(len(cursp.get_extrema(minima=False, locals=True, include_edges=False)[1])))
+                line.append(
+                    str(
+                        len(
+                            cursp.get_extrema(
+                                minima=False, locals=True, include_edges=False
+                            )[1]
+                        )
+                    )
+                )
                 line.append(str(t2 - t1))
                 line.append(str(loss(cursp.data, spc_ideal.data)))
-                out.write(delimiter.join(line) + '\n')
+                out.write(delimiter.join(line) + "\n")
 
     @classmethod
     def _comb_spectrum(cls, spc, fold=2):
         from spectrum import Spectrum
-        assert fold >= 2, 'Can\'t split in case fold < 2!'
+
+        assert fold >= 2, "Can't split in case fold < 2!"
         size = len(spc)
         for offset in range(fold):
             ideal = Spectrum(*spc[offset::fold])
@@ -87,7 +101,7 @@ class ParamGrid:
             try:
                 basis.interpolate(spc.wavenums)
                 reference.interpolate(spc.wavenums)
-                reference.clss = 'ref'
+                reference.clss = "ref"
                 yproc = process(basis, **process_params)
                 results.append(loss(yproc, reference.data))
             except Exception as ex:
@@ -97,7 +111,6 @@ class ParamGrid:
             return np.inf
         results = np.array(results)
         return np.round(results.mean(), 4)
-
 
     @classmethod
     def best_method_perfomance(cls, spc, method, grid, loss=LossFunc.RMSE, fold=2):
@@ -120,17 +133,26 @@ class ParamGrid:
         for methodname in cls.configs:
             grid = general_grid[methodname]
             print(methodname, grid)
-            prmset, score = cls.best_method_perfomance(spc, getattr(cls, methodname), grid, loss, fold)
-            print('Parameters: ', prmset, ', Score: ', score)
+            prmset, score = cls.best_method_perfomance(
+                spc, getattr(cls, methodname), grid, loss, fold
+            )
+            print("Parameters: ", prmset, ", Score: ", score)
             if score < best_score:
                 best_score = score
                 best_params = prmset
                 best_method = methodname
         return best_method, best_params, best_score
 
-
     @classmethod
-    def peaks_losses(cls, noised, ideal, process, config: dict, iterby: str, loss=LossFunc.RMSE, ):
+    def peaks_losses(
+        cls,
+        noised,
+        ideal,
+        process,
+        config: dict,
+        iterby: str,
+        loss=LossFunc.RMSE,
+    ):
         real_peaks_number = len(ideal.get_extrema(minima=False, locals=True)[0])
         losses = []
         peaks = []  # [len(noised.get_extrema(minima=False, locals=True)[0])]
@@ -146,44 +168,29 @@ class ParamGrid:
 
         _, (ax1, ax2) = plt.subplots(1, 2)
         ax1.plot(prms, losses)
-        ax1.set_title('Losses')
+        ax1.set_title("Losses")
         ax2.plot(prms, peaks)
-        ax2.set_title('Peak number')
-        ax2.axhline(real_peaks_number, color='r')
+        ax2.set_title("Peak number")
+        ax2.axhline(real_peaks_number, color="r")
         ax1.set_xlabel(iterby)
         ax2.set_xlabel(iterby)
         plt.show()
 
 
-
 class Smoother(ParamGrid):
     configs = {
-        'savgol': {
-            'window_length': list(range(1, 36, 2)),
-            'order': [3, 4, 5, 6, 7]
+        "savgol": {"window_length": list(range(1, 36, 2)), "order": [3, 4, 5, 6, 7]},
+        "moving_average": {"window_length": list(range(1, 36, 2))},
+        "fourier": {"threshold": [1e-5], "size": np.arange(0.95, 1.0, 0.01)},
+        "gaussian": {"window_length": list(range(1, 18, 2)), "order": list(range(9))},
+        "wiener": {
+            "window_length": list(range(1, 18, 2)),
         },
-        'moving_average': {
-            'window_length': list(range(1, 36, 2))
-        },
-        'fourier': {
-            'threshold': [1e-5],
-            'size': np.arange(0.95, 1., 0.01)
-        },
-        
-        'gaussian': {
-            'window_length': list(range(1, 18, 2)),
-            'order': list(range(9))
-        },
-        'wiener': {
-            'window_length': list(range(1, 18, 2)),
-        }
     }
-
 
     @staticmethod
     def gaussian(spc, window_length=5, order=5):
         return gaussian_filter(spc.data, sigma=window_length, order=order)
-
 
     @staticmethod
     def wiener(spc, window_length=5):
@@ -198,20 +205,28 @@ class Smoother(ParamGrid):
     @staticmethod
     def moving_average(spc, window_length=5):
         data = spc.data
-        w = data[:window_length - 1].sum()
+        w = data[: window_length - 1].sum()
         hw = window_length // 2
         res = list(data[:hw])
         for i in range(hw, len(data) - hw):
             w += data[i + hw]
             res.append(w / window_length)
             w -= data[i - hw]
-        res.extend(data[len(data) - hw:])
+        res.extend(data[len(data) - hw :])
         assert len(res) == len(data)
         res = np.array(res, dtype=float)
         return res
 
     @classmethod
-    def iterative_smoothing(cls, spc, smoothfunc, n_iter, lossfunc=LossFunc.RMSE, show_smoothed=False, **kwargs):
+    def iterative_smoothing(
+        cls,
+        spc,
+        smoothfunc,
+        n_iter,
+        lossfunc=LossFunc.RMSE,
+        show_smoothed=False,
+        **kwargs
+    ):
         data = spc.data
         iterations = list(range(1, n_iter + 1))
         res = []
@@ -224,12 +239,14 @@ class Smoother(ParamGrid):
         if show_smoothed:
             plt.show()
         plt.figure()
-        plt.plot(iterations, res, label='Loss(n)')
-        plt.plot(iterations, savgol_filter(res, deriv=1, window_length=13, polyorder=5), label='dLoss/dn')
+        plt.plot(iterations, res, label="Loss(n)")
+        plt.plot(
+            iterations,
+            savgol_filter(res, deriv=1, window_length=13, polyorder=5),
+            label="dLoss/dn",
+        )
         plt.legend()
         plt.show()
-
-    
 
     @staticmethod
     def fourier(spc, thr=1e-4, size=0.97):
@@ -238,6 +255,6 @@ class Smoother(ParamGrid):
         abs_vals = np.abs(y)
         level = thr * np.max(abs_vals)
         y[abs_vals < level] = 0
-        y[int(len(y) * size):] = 0
+        y[int(len(y) * size) :] = 0
         assert len(spc) == len(ifft(y))
         return ifft(y)
